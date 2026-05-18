@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-const bioIdCheck = /^\d{6}$/;
+const bioIdCheck = /^\d{1,6}$/;
 const passwordCheck = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 const EmployeeRegisterPage = () => {
@@ -28,7 +28,7 @@ const EmployeeRegisterPage = () => {
     setIsSubmitting(true);
 
     if (!bioIdCheck.test(formData.bioid)) {
-      setErrorMessage("Bio ID must be exactly 6 digits.");
+      setErrorMessage("Bio ID must be 1 to 6 digits.");
       setIsSubmitting(false);
       return;
     }
@@ -131,8 +131,7 @@ const EmployeeRegisterPage = () => {
                 value={formData.bioid}
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-[#00154d] focus:border-transparent outline-none transition-all bg-white"
-                pattern="\d{6}"
-                title="Bio ID must be exactly 6 digits."
+                title="Bio ID must be 1 to 6 digits."
                 required
               />
             </div>

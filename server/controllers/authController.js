@@ -243,80 +243,83 @@ const login = (req, res) => {
 // };
 
 // //Employee login
-// const employeeLogin = (req, res) => {
-//   const schema = Joi.object({
-//     bio_id: Joi.string()
-//       .pattern(/^\d{1,6}$/)
-//       .required(),
-//     password: Joi.string().required(),
-//   });
+const employeeLogin = (req, res) => {
+  const schema = Joi.object({
+    bio_id: Joi.string()
+      .pattern(/^\d{1,6}$/)
+      .required()
+      .messages({
+        "string.pattern.base": "Bio ID must be 1 to 6 digits",
+      }),
+    password: Joi.string().required(),
+  });
 
-//   const { error, value } = schema.validate(req.body);
+  const { error, value } = schema.validate(req.body);
 
-//   if (error) {
-//     return res.status(400).json({ error: error.details[0].message });
-//   }
+  if (error) {
+    return res.status(400).json({ error: error.details[0].message });
+  }
 
-//   const { bio_id, password } = value;
+  const { bio_id, password } = value;
 
-//   const sql = `
-//     SELECT u.user_id, u.username, u.bio_id, u.password, u.role, u.status,
-//           u.active_session_id, u.dept_id, d.dept_name
-//     FROM users u
-//     LEFT JOIN departments d ON u.dept_id = d.dept_id
-//     WHERE u.bio_id = ? AND u.role = 'employee'
-//     LIMIT 1
-//   `;
+  const sql = `
+    SELECT u.user_id, u.username, u.bio_id, u.password, u.role, u.status,
+          u.active_session_id, u.dept_id, d.dept_name
+    FROM users u
+    LEFT JOIN departments d ON u.dept_id = d.dept_id
+    WHERE u.bio_id = ? AND u.role = 'employee'
+    LIMIT 1
+  `;
 
-//   db.query(sql, [bio_id], (err, results) => {
-//     if (err) return res.status(500).json({ error: err.message });
+  db.query(sql, [bio_id], (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
 
-//     if (!results.length) {
-//       return res.status(401).json({ error: "Invalid BioID or password." });
-//     }
+    if (!results.length) {
+      return res.status(401).json({ error: "Invalid BioID or password." });
+    }
 
-//     const user = results[0];
+    const user = results[0];
 
-//     const isPasswordValid = bcrypt.compareSync(password, user.password);
+    const isPasswordValid = bcrypt.compareSync(password, user.password);
 
-//     if (!isPasswordValid) {
-//       return res.status(401).json({ error: "Invalid BioID or password." });
-//     }
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid BioID or password." });
+    }
 
-//     if (user.status !== "approved") {
-//       return res.status(403).json({
-//         error: "Your account is pending admin approval.",
-//       });
-//     }
+    if (user.status !== "approved") {
+      return res.status(403).json({
+        error: "Your account is pending admin approval.",
+      });
+    }
 
-//     const sessionId = req.session.id;
+    const sessionId = req.session.id;
 
-//     if (user.active_session_id && user.active_session_id !== sessionId) {
-//       return res.status(403).json({
-//         error: "User already logged in.",
-//       });
-//     }
+    if (user.active_session_id && user.active_session_id !== sessionId) {
+      return res.status(403).json({
+        error: "User already logged in.",
+      });
+    }
 
-//     req.session.user = {
-//       user_id: user.user_id,
-//       username: user.username,
-//       role: user.role,
-//       bio_id: user.bio_id,
-//       status: user.status,
-//       department: user.dept_name,
-//     };
+    req.session.user = {
+      user_id: user.user_id,
+      username: user.username,
+      role: user.role,
+      bio_id: user.bio_id,
+      status: user.status,
+      department: user.dept_name,
+    };
 
-//     db.query("UPDATE users SET active_session_id = ? WHERE user_id = ?", [
-//       sessionId,
-//       user.user_id,
-//     ]);
+    db.query("UPDATE users SET active_session_id = ? WHERE user_id = ?", [
+      sessionId,
+      user.user_id,
+    ]);
 
-//     return res.json({
-//       message: "Employee login successful",
-//       user: req.session.user,
-//     });
-//   });
-// };
+    return res.json({
+      message: "Employee login successful",
+      user: req.session.user,
+    });
+  });
+};
 
 //Logout user
 const logout = (req, res) => {
@@ -423,6 +426,7 @@ const getDepartments = (req, res) => {
 module.exports = {
   register,
   login,
+  employeeLogin,
   logout,
   getCurrentUser,
   changePassword,

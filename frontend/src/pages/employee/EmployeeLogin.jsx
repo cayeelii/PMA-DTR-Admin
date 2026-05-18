@@ -90,9 +90,8 @@ const EmployeeLoginPage = ({ setUser }) => {
                 value={credentials.bio_id}
                 onChange={handleChange}
                 className={`w-full px-4 py-3 rounded-lg border transition-all outline-none focus:ring-2 focus:ring-[#00154d] focus:border-transparent bg-white ${errorMessage ? "border-red-400 bg-red-50" : "border-gray-300"}`}
-                placeholder="Enter 6-digit BioID"
-                pattern="\d{6}"
-                title="Bio ID must be exactly 6 digits."
+                placeholder="Enter 1-6 digit BioID"
+                title="Bio ID must be 1 to 6 digits."
                 required
               />
             </div>
