@@ -5,6 +5,7 @@ import autoTable from "jspdf-autotable";
 
 const EmployeeView = ({
   departmentName,
+  departmentId,   // dept_id from the parent — used for signatory fetch (mirrors ReportPreview)
   batchId,
   onBack,
   onSelectEmployee,
@@ -91,7 +92,7 @@ const EmployeeView = ({
     }
   };
 
-  // ── PDF helpers — mirrors ReportPreview exactly ────────────────────────────
+  // ── Shared date/time helpers (identical to ReportPreview) ─────────────────
 
   const parseDate = (value) => {
     if (!value) return null;
@@ -127,6 +128,7 @@ const EmployeeView = ({
     };
   };
 
+  // Strip seconds/AM-PM suffix: "08:30:00 AM" → "08:30"
   const formatTimeShort = (timeStr) => {
     if (!timeStr || timeStr === "-" || timeStr === "--") return "";
     const parts = timeStr.split(":");
@@ -155,27 +157,39 @@ const EmployeeView = ({
     return `${twelveHour}:${minutes}`;
   };
 
-  // ── Draw the 2-column DTR slip (matches ReportPreview drawDTRForm) ─────────
-  const drawDTRForm = (doc, startX, width, dtrRows, empObj) => {
-    const margin       = 6;
+  // ── 2-Column: drawDTRForm — exactly mirrors ReportPreview ─────────────────
+  const drawDTRForm = (doc, startX, width, dtrRows, empObj, signatory) => {
+    const margin       = 3;          // matches ReportPreview
     const centerX      = startX + width / 2;
     const contentWidth = width - margin * 2;
+    const zoom         = 1.4;        // matches ReportPreview
+    const z            = zoom;
     const { monthYear } = getDateRange(dtrRows);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
+    // --- 1. Header ---
+    doc.setFont("times", "bold");
+    doc.setFontSize(12 * z);
     doc.text("Monthly Daily Time Record", centerX, 12, { align: "center" });
-    doc.setFontSize(10);
-    doc.text(`For the Month of ${monthYear.toUpperCase()}`, centerX, 18, { align: "center" });
 
+    doc.setFont("times", "normal");
+    doc.setFontSize(9 * z);
+    doc.text(`For the Month of ${String(monthYear).toUpperCase()}`, centerX, 18, { align: "center" });
+
+    // --- 2. Identity ---
     doc.setLineWidth(0.1);
     doc.line(startX + margin, 21, startX + width - margin, 21);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(8 * z);
     doc.text(`Name: ${empObj?.name?.toUpperCase() || "-"}`, startX + margin, 26);
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(7.5 * z);
     doc.text(`Dept / Office: ${departmentName || "-"}`, startX + margin, 31);
+
     doc.line(startX + margin, 33, startX + width - margin, 33);
 
+    // --- 3. Table header (2 rows — group + IN/OUT) ---
     const tableHeader = [
       [
         { content: "No / Day", rowSpan: 2, styles: { valign: "middle", halign: "left" } },
@@ -186,13 +200,16 @@ const EmployeeView = ({
       ["IN", "OUT", "IN", "OUT", "IN", "OUT"],
     ];
 
+    // --- 4. 31-row data ---
     const daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const rows = [];
     for (let i = 1; i <= 31; i++) {
+      const dayNum = String(i).padStart(2, "0");
       const record = dtrRows.find((r) => {
         const d = parseDate(r.date);
         return d && d.getDate() === i;
       });
+
       let dayName = record?.day || "";
       if (!dayName && dtrRows.length > 0) {
         const firstDate = parseDate(dtrRows[0].date);
@@ -201,8 +218,9 @@ const EmployeeView = ({
           dayName = daysArr[d.getDay()];
         }
       }
+
       rows.push([
-        `${String(i).padStart(2, "0")} ${dayName}`,
+        `${dayNum}    ${dayName}`,   // 4 spaces — matches ReportPreview exactly
         formatTimeShort(record?.amIn),
         formatTimeShort(record?.amOut),
         formatTimeShort(record?.pmIn),
@@ -219,9 +237,20 @@ const EmployeeView = ({
       margin: { left: startX + margin },
       tableWidth: contentWidth,
       theme: "plain",
-      styles: { fontSize: 7.5, cellPadding: 0.8, halign: "center", textColor: [0, 0, 0], font: "helvetica" },
-      headStyles: { fillColor: [255, 255, 255], fontStyle: "bold" },
-      columnStyles: { 0: { halign: "left", cellWidth: 16 } },
+      styles: {
+        fontSize: 8 * z,
+        cellPadding: 0.8,
+        halign: "center",
+        textColor: [0, 0, 0],
+        font: "times",
+      },
+      headStyles: {
+        fillColor: [255, 255, 255],
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        0: { halign: "left", cellWidth: 20 },
+      },
       didDrawCell: (data) => {
         doc.setLineWidth(0.1);
         doc.line(
@@ -233,76 +262,275 @@ const EmployeeView = ({
       },
     });
 
+    // Capture finalY immediately — before any subsequent autoTable call can overwrite
+    // doc.lastAutoTable (critical when drawing left then right half on the same page).
     const finalTableY = doc.lastAutoTable.finalY;
-    const footerY     = finalTableY + 12;
-    doc.line(startX + margin + 5, footerY, startX + width - margin - 5, footerY);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.text("EMPLOYEE SIGNATURE", centerX, footerY + 5, { align: "center" });
 
-    const sigY = footerY + 18;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text("CAPT JOHN RONALD A MANGAHAS PN(GSC)", centerX, sigY, { align: "center" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text("AC of S for Plans and Programs, MA5, PMA", centerX, sigY + 5, { align: "center" });
+    // --- 5. Footer / Signature ---
+    const footerY = finalTableY + 8;   // matches ReportPreview
+
+    doc.line(startX + margin + 5, footerY, startX + width - margin - 5, footerY);
+    doc.setFont("times", "normal");
+    doc.setFontSize(8 * z);
+    doc.text("EMPLOYEE SIGNATURE", centerX, footerY + 4, { align: "center" }); // +4 matches RP
+
+    const sigY = footerY + 14;  // matches ReportPreview (was +18)
+    doc.line(startX + margin + 5, sigY, startX + width - margin - 5, sigY);
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(9 * z);
+    const bossName =
+      signatory?.head_name?.toUpperCase() ||
+      "CAPT JOHN RONALD A MANGAHAS PN(GSC)";
+    doc.text(bossName, centerX, sigY + 4, { align: "center" });
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(8 * z);
+    const bossPos = signatory?.position || "AC of S for Plans and Programs, MA5, PMA";
+    doc.text(bossPos, centerX, sigY + 8, { align: "center" });
 
     const dateStr = new Date().toLocaleDateString("en-US", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric",
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
-    doc.setFontSize(7.5);
-    doc.text(`dateprint: ${dateStr}`, startX + margin, sigY + 12);
-    doc.text("Page 1 of 1", startX + width - margin, sigY + 12, { align: "right" });
+    doc.setFontSize(7.5 * z);
+    doc.text(`dateprint: ${dateStr}`, startX + margin, sigY + 14);  // +14 matches RP
+    doc.text("Page 1 of 1", startX + width - margin, sigY + 14, { align: "right" });
   };
 
-  // ── Draw 1-column header (matches ReportPreview) ──────────────────────────
+  // ── 1-Column: header, table, footer — exactly mirrors ReportPreview ────────
+
   const drawOneColumnHeader = (doc, dtrRows, empObj) => {
-    const { monthYear, rangeText } = getDateRange(dtrRows);
+    const validDates = dtrRows
+      .map((r) => parseDate(r.date))
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+    const monthYear = validDates.length
+      ? validDates[0].toLocaleString("en-US", { month: "long", year: "numeric" })
+      : "-";
+
+    const employeeName = empObj?.name || "";
+    const employeeId   = empObj?.id   || "";
+
     doc.setLineWidth(0.4);
     doc.line(18, 13, 192, 13);
-    doc.setFont(undefined, "bold");
-    doc.setFontSize(10);
-    doc.text(`DAILY TIME RECORD OF - ${String(monthYear).toUpperCase()}`, 105, 18, { align: "center" });
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(12);
+    doc.text("MONTHLY DAILY TIME RECORD -- DRAFT COPY", 105, 18, { align: "center" });
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    doc.text(`For the Month of ${String(monthYear).toUpperCase()}`, 105, 23, { align: "center" });
+
     doc.setLineWidth(0.25);
-    doc.line(18, 20.2, 192, 20.2);
-    doc.setFont(undefined, "normal");
+    doc.line(18, 25.2, 192, 25.2);
+
     doc.setFontSize(8);
-    doc.text(`Statistics Date: ${rangeText}`, 19.2, 23.1);
-    doc.text(`Office: ${departmentName || "-"}`, 192, 23.1, { align: "right" });
+    doc.text(`Employee Name: ${employeeName || "-"}`, 19, 29);
+    doc.text(`Department: ${departmentName || "-"}`, 105, 29, { align: "center" });
+    doc.text(`BIO ID NO: ${employeeId || "-"}`, 192, 29, { align: "right" });
+
     doc.setLineWidth(0.25);
-    doc.line(18, 25.0, 192, 25.0);
-    doc.text(`Name: ${empObj?.name || "-"}`, 19.2, 28.0);
-    doc.line(18, 29.5, 192, 29.5);
+    doc.line(18, 31.8, 192, 31.8);
   };
 
-  const drawOneColumnSignatures = (doc, contentEndY, empObj) => {
-    let signatureY = contentEndY + 32;
-    if (signatureY > doc.internal.pageSize.getHeight() - 30) {
+  const drawOneColumnTable = (doc, dtrRows) => {
+    const marginLeft = 18;
+    const tableWidth = 174;  // matches ReportPreview
+
+    autoTable(doc, {
+      startY: 35,
+      head: [[
+        { content: "Date", styles: { halign: "left" } },
+        "Day",
+        "AM IN",
+        "AM OUT",
+        "PM IN",
+        "PM OUT",
+        "OT IN",
+        "OT OUT",
+      ]],
+      body: dtrRows.map((row) => [
+        formatDateForOneColumn(row.date),
+        row.day || "",
+        formatTimeForOneColumn(row.amIn  || row.am_in),
+        formatTimeForOneColumn(row.amOut || row.am_out),
+        formatTimeForOneColumn(row.pmIn  || row.pm_in),
+        formatTimeForOneColumn(row.pmOut || row.pm_out),
+        formatTimeForOneColumn(row.otIn  || row.ot_in),
+        formatTimeForOneColumn(row.otOut || row.ot_out),
+      ]),
+      margin: { left: marginLeft },
+      tableWidth,
+      theme: "plain",
+      styles: {
+        fontSize: 8,
+        cellPadding: 1.2,
+        halign: "center",
+        valign: "middle",
+        lineColor: 0,
+        lineWidth: 0,
+        font: "times",
+      },
+      headStyles: {
+        fillColor: [255, 255, 255],
+        textColor: 0,
+        fontStyle: "bold",
+        lineColor: 0,
+        lineWidth: 0,
+      },
+      bodyStyles: {
+        lineColor: 0,
+        lineWidth: 0,
+      },
+      columnStyles: {
+        0: { halign: "left", cellWidth: 24.5 },
+        1: { cellWidth: 14.5 },
+        2: { cellWidth: 20.5 },
+        3: { cellWidth: 20.5 },
+        4: { cellWidth: 20.5 },
+        5: { cellWidth: 20.5 },
+        6: { cellWidth: 20.5 },
+        7: { cellWidth: 20.5 },
+      },
+      didParseCell: (data) => {
+        if (data.section === "head" && data.column.index === 0) {
+          data.cell.styles.halign = "left";
+        }
+      },
+      didDrawCell: (data) => {
+        if (
+          (data.section === "head" || data.section === "body") &&
+          data.column.index === data.table.columns.length - 1
+        ) {
+          const y = data.cell.y + data.cell.height;
+          doc.setLineWidth(0.2);
+          doc.line(marginLeft, y, marginLeft + tableWidth, y);
+        }
+      },
+    });
+  };
+
+  const drawOneColumnSignatures = (doc, dtrRows, empObj, signatory) => {
+    const validDates = dtrRows
+      .map((r) => parseDate(r.date))
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+    const monthYear = validDates.length
+      ? validDates[0].toLocaleString("en-US", { month: "long", year: "numeric" })
+      : "-";
+
+    const finalY = doc.lastAutoTable?.finalY || 35;
+
+    // Note block — matches ReportPreview exactly
+    const noteY = finalY + 6;
+    const note =
+      "SUBMIT DRAFT COPY OF DTR AT OMAI for validation/approval of entries. Attach original QB form and mission order in your field copy only. Draft Copy must also be signed by your DEPT. HEAD / SUPERVISOR prior to submission to OMAI.";
+    const noteLines = doc.splitTextToSize(note, 160);
+    doc.setFont("times", "bold");
+    doc.setFontSize(7);
+    doc.text(noteLines, 18, noteY);
+
+    const extraSignatureSpace = 18;
+    let signatureY = noteY + noteLines.length * 3.5 + 10 + extraSignatureSpace;
+
+    if (signatureY > doc.internal.pageSize.getHeight() - 35) {
       doc.addPage();
-      signatureY = 40;
+      // Redraw header on overflow page
+      doc.setLineWidth(0.4);
+      doc.line(18, 13, 192, 13);
+      doc.setFont("times", "bold");
+      doc.setFontSize(12);
+      doc.text("MONTHLY DAILY TIME RECORD -- DRAFT COPY", 105, 18, { align: "center" });
+      doc.setFont("times", "normal");
+      doc.setFontSize(9);
+      doc.text(`For the Month of ${String(monthYear).toUpperCase()}`, 105, 23, { align: "center" });
+      doc.setLineWidth(0.25);
+      doc.line(18, 25.2, 192, 25.2);
+      doc.setFontSize(8);
+      doc.text(`Employee Name: ${empObj?.name || "-"}`, 19, 29);
+      doc.text(`Department: ${departmentName || "-"}`, 105, 29, { align: "center" });
+      doc.text(`BIO ID NO: ${empObj?.id || "-"}`, 192, 29, { align: "right" });
+      doc.setLineWidth(0.25);
+      doc.line(18, 31.8, 192, 31.8);
+      signatureY = 52;
     }
+
+    // Certified / Approved labels
+    doc.setFont("times", "normal");
+    doc.setFontSize(8);
+    doc.text("Certified True and Correct", 48, signatureY - 8, { align: "center" });
+    doc.text("Approved by", 152, signatureY - 8, { align: "center" });
+
     const leftStart = 26, leftEnd = 86;
     const rightStart = 124, rightEnd = 184;
+
     doc.setLineWidth(0.3);
     doc.line(leftStart, signatureY, leftEnd, signatureY);
     doc.line(rightStart, signatureY, rightEnd, signatureY);
-    doc.setFontSize(8);
-    doc.setFont(undefined, "bold");
-    doc.text(empObj?.name || "Employee", (leftStart + leftEnd) / 2, signatureY - 2, { align: "center" });
-    doc.text("AC of S for Plans and Programs, MA5, PMA", (rightStart + rightEnd) / 2, signatureY - 2, { align: "center" });
-    doc.setFont(undefined, "normal");
-    doc.text("Employee Signature", (leftStart + leftEnd) / 2, signatureY + 5, { align: "center" });
-    doc.text("Supervisor", (rightStart + rightEnd) / 2, signatureY + 5, { align: "center" });
+
+    doc.setFontSize(9);
+    doc.setFont("times", "bold");
+    // Employee name centred between left signature line endpoints (same as ReportPreview: x=56)
+    doc.text(empObj?.name || "Employee", 56, signatureY - 2, { align: "center" });
+
+    const supervisorName     = signatory?.head_name || "Supervisor";
+    const supervisorPosition = signatory?.position  || "";
+    const supervisorSignature =
+      signatory?.signature     ||
+      signatory?.signature_url ||
+      signatory?.signatureUrl  ||
+      signatory?.signature_file ||
+      "";
+
+    if (typeof supervisorSignature === "string" && supervisorSignature.startsWith("data:image/")) {
+      try {
+        doc.addImage(supervisorSignature, "PNG", rightStart + 10, signatureY - 13, 40, 10);
+      } catch (err) {
+        console.warn("Supervisor signature image could not be rendered:", err);
+      }
+    }
+
+    doc.text(supervisorName, 154, signatureY + 5, { align: "center" });
+    doc.setFont("times", "normal");
+    doc.text("EMPLOYEE SIGNATURE", 56, signatureY + 5, { align: "center" });
+    doc.text(supervisorPosition, 154, signatureY + 10, { align: "center" });
+
+    const dateStr = new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    doc.text(`dateprint: ${dateStr}`, 18, signatureY + 13);
+    doc.text("Page 1 of 1", 192, signatureY + 13, { align: "right" });
   };
 
-  // ── Main export ────────────────────────────────────────────────────────────
+  // ── Main export — consolidated across all employees ────────────────────────
   const handleExportPDF = async (columnLayout) => {
     setShowPdfOptions(false);
     setExportingPdf(true);
     setPdfProgress("Starting export…");
 
     try {
+      // Fetch the department signatory once — mirrors ReportPreview's useEffect fetch.
+      // Uses dept_id (departmentId prop) with the same endpoint and fallback pattern.
+      let signatory = null;
+      try {
+        const deptId = departmentId;
+        if (deptId) {
+          const sigRes = await fetch(
+            `${API_BASE_URL}/api/dtr/signatory?dept_id=${encodeURIComponent(deptId)}`,
+          );
+          if (sigRes.ok) signatory = await sigRes.json();
+        }
+      } catch {
+        // continue without signatory — fallback text will be used in the PDF
+      }
+
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -327,7 +555,7 @@ const EmployeeView = ({
           dtrRows = [];
         }
 
-        // Normalise dates: YYYY-MM-DD → MM/DD/YY (matches ReportPreview parseDate input)
+        // Normalise YYYY-MM-DD → MM/DD/YY (matches parseDate expected input)
         const normalisedRows = (dtrRows || []).map((r) => {
           let dateStr = r.date || "";
           const iso = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -341,63 +569,15 @@ const EmployeeView = ({
         const empObj = { name: emp.name, id: emp.id };
 
         if (columnLayout === "2") {
-          drawDTRForm(doc, 0, pageWidth / 2, normalisedRows, empObj);
-          drawDTRForm(doc, pageWidth / 2, pageWidth / 2, normalisedRows, empObj);
+          // Draw left then right half — matches ReportPreview drawDTRForm(0, half) + drawDTRForm(half, half)
+          drawDTRForm(doc, 0,             pageWidth / 2, normalisedRows, empObj, signatory);
+          drawDTRForm(doc, pageWidth / 2, pageWidth / 2, normalisedRows, empObj, signatory);
+
         } else {
+          // 1-column: header → table → note + signatures
           drawOneColumnHeader(doc, normalisedRows, empObj);
-
-          const marginLeft = 18;
-          const tableWidth = 192 - marginLeft;
-
-          autoTable(doc, {
-            startY: 39.5,
-            head: [[
-              { content: "Date", styles: { halign: "left" } },
-              "AM IN", "AM OUT", "PM IN", "PM OUT", "OT IN", "OT OUT",
-            ]],
-            body: normalisedRows.map((row) => [
-              formatDateForOneColumn(row.date),
-              formatTimeForOneColumn(row.amIn),
-              formatTimeForOneColumn(row.amOut),
-              formatTimeForOneColumn(row.pmIn),
-              formatTimeForOneColumn(row.pmOut),
-              formatTimeForOneColumn(row.otIn),
-              formatTimeForOneColumn(row.otOut),
-            ]),
-            margin: { left: marginLeft },
-            tableWidth,
-            styles: { fontSize: 7, cellPadding: 1.2, halign: "center", lineWidth: 0, lineColor: 0 },
-            headStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: "bold", lineWidth: 0, lineColor: 0 },
-            bodyStyles: { lineWidth: 0, lineColor: 0 },
-            columnStyles: {
-              0: { halign: "left", cellWidth: 24 },
-              1: { cellWidth: 19.5 },
-              2: { cellWidth: 19.5 },
-              3: { cellWidth: 19.5 },
-              4: { cellWidth: 19.5 },
-              5: { cellWidth: 19.5 },
-              6: { cellWidth: 19.5 },
-            },
-            theme: "plain",
-            didParseCell: (data) => {
-              if (data.section === "head" && data.column.index === 0) {
-                data.cell.styles.halign = "left";
-              }
-            },
-            didDrawCell: (data) => {
-              if (
-                (data.section === "head" || data.section === "body") &&
-                data.column.index === data.table.columns.length - 1
-              ) {
-                const y  = data.cell.y + data.cell.height;
-                doc.setLineWidth(0.2);
-                doc.line(marginLeft, y, marginLeft + tableWidth, y);
-              }
-            },
-          });
-
-          const finalY = doc.lastAutoTable?.finalY || 38;
-          drawOneColumnSignatures(doc, finalY, empObj);
+          drawOneColumnTable(doc, normalisedRows);
+          drawOneColumnSignatures(doc, normalisedRows, empObj, signatory);
         }
       }
 
