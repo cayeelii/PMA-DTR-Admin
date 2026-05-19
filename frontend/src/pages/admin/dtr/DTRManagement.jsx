@@ -200,6 +200,7 @@ const DTRManagement = () => {
           {step === 3 && (
             <EmployeeView
               departmentName={selectedDept?.name}
+              departmentId={selectedDept?.dept_id}
               batchId={batchId}
               onBack={() => setStep(2)}
               onSelectEmployee={handleEmployeeSelect}
