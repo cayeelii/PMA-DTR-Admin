@@ -280,8 +280,6 @@ const DTREditView = ({ employee, batchId, onBack, onGenerateReport }) => {
     loadMaintenance();
   }, [loadMaintenance]);
 
-  const formatTime = formatDisplayTime;
-
   const convertTo24Hour = (time, field) => {
     if (!time || typeof time !== "string") return null;
 
@@ -380,12 +378,12 @@ const DTREditView = ({ employee, batchId, onBack, onGenerateReport }) => {
 
             day: DAY_LABELS[dateObj.getDay()],
 
-            amIn: formatTime(row.amIn),
-            amOut: formatTime(row.amOut),
-            pmIn: formatTime(row.pmIn),
-            pmOut: formatTime(row.pmOut),
-            otIn: formatTime(row.otIn),
-            otOut: formatTime(row.otOut),
+            amIn: formatDisplayTime(row.amIn),
+            amOut: formatDisplayTime(row.amOut),
+            pmIn: formatDisplayTime(row.pmIn),
+            pmOut: formatDisplayTime(row.pmOut),
+            otIn: formatDisplayTime(row.otIn),
+            otOut: formatDisplayTime(row.otOut),
           };
         })
         .filter(Boolean);
@@ -699,6 +697,8 @@ const DTREditView = ({ employee, batchId, onBack, onGenerateReport }) => {
     }
   };
 
+  const employeeBioId = employee?.bio_id || employee?.id || "N/A";
+
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden max-w-6xl mx-auto border border-gray-100 flex flex-col h-[calc(80vh-80px)] min-h-[300px]">
       {/* Header */}
@@ -719,6 +719,9 @@ const DTREditView = ({ employee, batchId, onBack, onGenerateReport }) => {
           <div>
             <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
               {employee?.name}
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                BIO ID: {employeeBioId}
+              </span>
               <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">
                 {employee?.departmentName}
               </span>
