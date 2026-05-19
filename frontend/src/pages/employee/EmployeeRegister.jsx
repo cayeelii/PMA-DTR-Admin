@@ -83,11 +83,50 @@ const EmployeeRegisterPage = () => {
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/auth/departments`);
-        const data = await res.json();
-        setDepartments(data);
+        // Prefer departments from the latest DTR batch if present (matches DepartmentView source)
+        const batchId = localStorage.getItem("current_batch_id");
+
+        if (batchId) {
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/dtr/departments?batch_id=${batchId}`);
+            if (res.ok) {
+              const dtrData = await res.json();
+
+              // Map DTR departments to the same shape as auth departments
+              const mapped = dtrData.map((d) => ({
+                dept_id: d.dept_id ?? null,
+                dept_name: d.name,
+              }));
+
+              // Use mapped DTR list if it has items
+              if (mapped && mapped.length > 0) {
+                setDepartments(mapped);
+                return;
+              }
+            }
+          } catch (err) {
+            console.warn("Failed to fetch DTR departments, falling back to auth departments", err);
+          }
+        }
+
+        // Fallback to canonical departments endpoint used for auth/signups
+        const resAuth = await fetch(`${API_BASE_URL}/api/auth/departments`);
+        if (resAuth.ok) {
+          const authData = await resAuth.json();
+
+          // normalize to expected shape if necessary
+          const normalized = authData.map((d) => ({
+            dept_id: d.dept_id ?? d.dept_id,
+            dept_name: d.dept_name ?? d.name,
+          }));
+
+          // Merge and dedupe by dept_name (but typically one of the sources is used)
+          const map = new Map();
+          normalized.forEach((d) => map.set(String(d.dept_name).trim(), d));
+          setDepartments(Array.from(map.values()));
+        }
       } catch (err) {
-        console.error("Failed to fetch departments");
+        console.error("Failed to fetch departments", err);
       }
     };
 

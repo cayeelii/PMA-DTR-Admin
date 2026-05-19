@@ -13,7 +13,7 @@ const getPendingUsers = (req, res) => {
   const sql = `
     SELECT u.user_id, u.username, u.bio_id, u.role, u.status, u.created_at, d.dept_name
     FROM users u
-    JOIN departments d ON u.dept_id = d.dept_id
+    LEFT JOIN departments d ON u.dept_id = d.dept_id
     WHERE u.status = 'pending' 
     AND u.role = 'employee'
   `;
