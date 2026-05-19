@@ -16,19 +16,18 @@ export default function ReportPreview({
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
   useEffect(() => {
-    setResolvedSignatory(signatory || null);
-  }, [signatory]);
-
-  useEffect(() => {
     const deptId = department?.dept_id || department?.id;
-    if (signatory || !deptId || !API_BASE_URL) return;
+    if (!deptId || !API_BASE_URL) {
+      setResolvedSignatory(signatory || null);
+      return;
+    }
 
     let cancelled = false;
 
     const fetchSignatory = async () => {
       try {
         const res = await fetch(
-          `${API_BASE_URL}/api/dtr/signatory?dept_id=${deptId}`,
+          `${API_BASE_URL}/api/dtr/signatory?dept_id=${encodeURIComponent(deptId)}`,
         );
         const data = await res.json();
         if (!cancelled) {
@@ -36,6 +35,9 @@ export default function ReportPreview({
         }
       } catch (error) {
         console.error("Failed to fetch supervisor name:", error);
+        if (!cancelled) {
+          setResolvedSignatory(signatory || null);
+        }
       }
     };
 
@@ -142,86 +144,6 @@ export default function ReportPreview({
 
     const twelveHour = ((hours + 11) % 12) + 1;
     return `${twelveHour}:${minutes}`;
-  };
-
-  const drawOneColumnHeader = (doc) => {
-    const { monthYear, rangeText } = getDateRange();
-
-    doc.setLineWidth(0.4);
-    doc.line(18, 13, 192, 13);
-
-    doc.setFont(undefined, "bold");
-    doc.setFontSize(10);
-    doc.text(
-      `DAILY TIME RECORD OF - ${String(monthYear).toUpperCase()}`,
-      105,
-      18,
-      {
-        align: "center",
-      },
-    );
-
-    doc.setLineWidth(0.25);
-    doc.line(18, 20.2, 192, 20.2);
-
-    doc.setFont(undefined, "normal");
-    doc.setFontSize(8);
-    doc.text(`Statistics Date: ${rangeText}`, 19.2, 23.1);
-    doc.text(`Office: ${department?.name || "-"}`, 192, 23.1, {
-      align: "right",
-    });
-
-    doc.setLineWidth(0.25);
-    doc.line(18, 25.0, 192, 25.0);
-
-    doc.text(`Name: ${employee?.name || "-"}`, 19.2, 28.0);
-
-    doc.line(18, 29.5, 192, 29.5);
-  };
-
-  const drawOneColumnSignatures = (doc, contentEndY) => {
-    let signatureY = contentEndY + 32; 
-
-    if (signatureY > doc.internal.pageSize.getHeight() - 30) {
-      doc.addPage();
-      signatureY = 40;
-    }
-
-    const leftStart = 26;
-    const leftEnd = 86;
-    const rightStart = 124;
-    const rightEnd = 184;
-
-    doc.setLineWidth(0.3);
-    doc.line(leftStart, signatureY, leftEnd, signatureY);
-    doc.line(rightStart, signatureY, rightEnd, signatureY);
-
-    doc.setFontSize(8);
-    doc.setFont(undefined, "bold");
-    doc.text(
-      employee?.name || "Employee",
-      (leftStart + leftEnd) / 2,
-      signatureY - 2,
-      {
-        align: "center",
-      },
-    );
-
-    const supervisorName = signatory
-      ? `${signatory.position || ""} ${signatory.head_name || ""}`.trim()
-      : "";
-
-    doc.text(supervisorName, (rightStart + rightEnd) / 2, signatureY - 2, {
-      align: "center",
-    });
-
-    doc.setFont(undefined, "normal");
-    doc.text("Employee Signature", (leftStart + leftEnd) / 2, signatureY + 5, {
-      align: "center",
-    });
-    doc.text("Supervisor", (rightStart + rightEnd) / 2, signatureY + 5, {
-      align: "center",
-    });
   };
 
   //Export to XLSX
@@ -400,12 +322,15 @@ export default function ReportPreview({
         doc.line(startX + margin + 5, sigY, startX + width - margin - 5, sigY);
         doc.setFont("times", "bold");
         doc.setFontSize(9 * z);
-        const bossName = signatory?.head_name?.toUpperCase() || "CAPT JOHN RONALD A MANGAHAS PN(GSC)";
+        const bossName =
+          activeSignatory?.head_name?.toUpperCase() ||
+          "CAPT JOHN RONALD A MANGAHAS PN(GSC)";
         doc.text(bossName, centerX, sigY + 4, { align: "center" });
 
         doc.setFont("times", "normal");
         doc.setFontSize(8 * z);
-        const bossPos = signatory?.position || "AC of S for Plans and Programs, MA5, PMA";
+        const bossPos =
+          activeSignatory?.position || "AC of S for Plans and Programs, MA5, PMA";
         doc.text(bossPos, centerX, sigY + 8, { align: "center" });
 
         const dateStr = new Date().toLocaleDateString("en-US", {
@@ -624,7 +549,7 @@ export default function ReportPreview({
     exportToPDF(columnLayout);
   };
 
-  console.log("SIGNATORY IN PREVIEW:", signatory);
+  console.log("SIGNATORY IN PREVIEW:", activeSignatory);
 
   return (
     <div>
