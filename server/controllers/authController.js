@@ -31,6 +31,7 @@ const register = (req, res) => {
   }
 
   const { username, bio_id, password, department } = value;
+  const normalizedDepartment = department.trim();
 
   const hashedPassword = bcrypt.hashSync(password, 10);
 
@@ -38,13 +39,14 @@ const register = (req, res) => {
   const status = "pending";
 
   const checkDeptSql =
-    "SELECT dept_id FROM departments WHERE dept_name = ? LIMIT 1";
+    "SELECT dept_id FROM departments WHERE LOWER(TRIM(dept_name)) = LOWER(TRIM(?)) LIMIT 1";
 
-  db.query(checkDeptSql, [department], (err, deptResult) => {
-    if (err) return res.status(500).json({ error: err.message });
+  const insertDepartmentSql = `
+    INSERT INTO departments (dept_name)
+    VALUES (?)
+  `;
 
-    const dept_id = deptResult[0]?.dept_id ?? null;
-
+  const insertUserWithDepartment = (deptId) => {
     const sql = `
       INSERT INTO users (username, bio_id, password, role, status, dept_id)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -52,7 +54,7 @@ const register = (req, res) => {
 
     db.query(
       sql,
-      [username, bio_id, hashedPassword, role, status, dept_id],
+      [username, bio_id, hashedPassword, role, status, deptId],
       (err, result) => {
         if (err) {
           if (err.code === "ER_DUP_ENTRY") {
@@ -68,6 +70,41 @@ const register = (req, res) => {
         });
       },
     );
+  };
+
+  db.query(checkDeptSql, [normalizedDepartment], (err, deptResult) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const existingDeptId = deptResult[0]?.dept_id;
+
+    if (existingDeptId) {
+      return insertUserWithDepartment(existingDeptId);
+    }
+
+    db.query(insertDepartmentSql, [normalizedDepartment], (insertErr, insertResult) => {
+      if (insertErr) {
+        // Handle race condition when another request inserts the same department first.
+        if (insertErr.code === "ER_DUP_ENTRY") {
+          return db.query(checkDeptSql, [normalizedDepartment], (retryErr, retryResult) => {
+            if (retryErr) return res.status(500).json({ error: retryErr.message });
+
+            const retryDeptId = retryResult[0]?.dept_id;
+
+            if (!retryDeptId) {
+              return res.status(500).json({
+                error: "Unable to resolve selected department.",
+              });
+            }
+
+            return insertUserWithDepartment(retryDeptId);
+          });
+        }
+
+        return res.status(500).json({ error: insertErr.message });
+      }
+
+      return insertUserWithDepartment(insertResult.insertId);
+    });
   });
 };
 

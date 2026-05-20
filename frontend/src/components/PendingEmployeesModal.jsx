@@ -35,7 +35,7 @@ function PendingEmployeesModal({
     return employees.filter((employee) =>
       employee.username.toLowerCase().includes(searchText) ||
       String(employee.bio_id).toLowerCase().includes(searchText) ||
-      employee.dept_name.toLowerCase().includes(searchText),
+      String(employee.dept_name || "").toLowerCase().includes(searchText),
     );
   }, [employees, search]);
 
@@ -132,7 +132,7 @@ function PendingEmployeesModal({
                         {employee.username}
                       </td>
                       <td className="text-center px-6 py-4">
-                        {employee.dept_name}
+                        {employee.dept_name || "-"}
                       </td>
                       <td className="text-center px-6 py-4">
                         <div className="flex justify-center gap-3">

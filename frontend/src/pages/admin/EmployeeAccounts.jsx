@@ -145,7 +145,9 @@ function EmployeeAccounts() {
             String(employee.bio_id)
                 .toLowerCase()
                 .includes(search.toLowerCase()) ||
-            employee.dept_name.toLowerCase().includes(search.toLowerCase()),
+            String(employee.dept_name || "")
+                .toLowerCase()
+                .includes(search.toLowerCase()),
     );
     const handleApprove = async (employee) => {
         const userId = employee.user_id;
@@ -526,7 +528,7 @@ function EmployeeAccounts() {
                                                             {employee.username}
                                                         </td>
                                                         <td className="text-center px-6 py-4">
-                                                            {employee.dept_name}
+                                                            {employee.dept_name || "-"}
                                                         </td>
                                                         <td className="text-center px-6 py-4">
                                                             <div className="flex justify-center">
