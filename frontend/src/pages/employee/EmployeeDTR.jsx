@@ -303,7 +303,21 @@ export default function EmployeeDTR() {
                 const text = String(value).trim();
                 if (!text || text === "-" || text === "--") return "";
 
-                return text;
+                const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP]M)?$/i);
+                if (!match) return text;
+
+                let hours = Number(match[1]);
+                const minutes = match[2];
+                const suffix = match[3]?.toUpperCase();
+
+                // Convert to 24-hour military format
+                if (suffix === "AM") {
+                    if (hours === 12) hours = 0;
+                } else if (suffix === "PM") {
+                    if (hours !== 12) hours += 12;
+                }
+
+                return `${String(hours).padStart(2, "0")}:${minutes}`;
             };
 
             const formatDateForOneColumn = (value) => {

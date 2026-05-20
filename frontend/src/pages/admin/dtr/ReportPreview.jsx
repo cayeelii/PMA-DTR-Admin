@@ -136,14 +136,14 @@ export default function ReportPreview({
     const minutes = match[2];
     const suffix = match[3]?.toUpperCase();
 
-    if (suffix === "AM" && hours === 12) {
-      hours = 0;
-    } else if (suffix === "PM" && hours !== 12) {
-      hours += 12;
+    // Convert to 24-hour military format
+    if (suffix === "AM") {
+      if (hours === 12) hours = 0;
+    } else if (suffix === "PM") {
+      if (hours !== 12) hours += 12;
     }
 
-    const twelveHour = ((hours + 11) % 12) + 1;
-    return `${twelveHour}:${minutes}`;
+    return `${String(hours).padStart(2, "0")}:${minutes}`;
   };
 
   //Export to XLSX
@@ -194,12 +194,26 @@ export default function ReportPreview({
       // zoom only scales font sizes; Y positions are fixed to fit portrait A4 (297mm)
       const zoom = 1.4;
 
-      // Helper to strip seconds and AM/PM (e.g., "08:30:00 AM" -> "08:30")
+      // Helper to convert to 24-hour military format (e.g., "08:30:00 AM" -> "08:30", "02:30:00 PM" -> "14:30")
       const formatTimeShort = (timeStr) => {
         if (!timeStr || timeStr === "-" || timeStr === "--") return "";
-        const parts = timeStr.split(":");
-        if (parts.length < 2) return timeStr;
-        return `${parts[0]}:${parts[1].split(" ")[0]}`;
+        
+        const text = String(timeStr).trim();
+        const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?$/i);
+        if (!match) return text;
+        
+        let hours = Number(match[1]);
+        const minutes = match[2];
+        const suffix = match[4]?.toUpperCase();
+        
+        // Convert to 24-hour military format
+        if (suffix === "AM") {
+          if (hours === 12) hours = 0;
+        } else if (suffix === "PM") {
+          if (hours !== 12) hours += 12;
+        }
+        
+        return `${String(hours).padStart(2, "0")}:${minutes}`;
       };
 
       // Helper function to draw a single DTR slip
